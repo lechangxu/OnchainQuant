@@ -33,6 +33,8 @@ impl OnchainQuant {
                 self.block_next
             );
         }
+        // not start, this will triger a start
+        self.block_next = exec::block_height();
         self.action();
     }
 
@@ -51,7 +53,6 @@ impl OnchainQuant {
             debug!("scheduled in {0} instead of {block}", self.block_next);
             return;
         }
-        self.action_id += 1;
         debug!("run action {} in block {}", self.action_id, block);
         let reservation_id = self
             .reservation_ids
@@ -65,13 +66,19 @@ impl OnchainQuant {
             self.block_step,
         )
         .expect("msg_send");
+        self.action_id += 1;
         self.block_next = block + self.block_step;
     }
 
-    fn reserve(&mut self) {
+    fn reserve(&mut self) -> OcqEvent {
         let reservation_id = ReservationId::reserve(RESERVATION_AMOUNT, RESERVATION_TIME)
             .expect("reservation across executions");
         self.reservation_ids.insert(msg::source(), reservation_id);
+        debug!("reserve {RESERVATION_AMOUNT} gas for {RESERVATION_TIME} blocks");
+        OcqEvent::GasReserve {
+            amount: RESERVATION_AMOUNT,
+            time: RESERVATION_TIME,
+        }
     }
 }
 
@@ -92,10 +99,7 @@ extern "C" fn handle() {
             quant.action();
             OcqEvent::Act
         }
-        OcqAction::GasReserve => {
-            quant.reserve();
-            OcqEvent::GasReserve
-        }
+        OcqAction::GasReserve => quant.reserve(),
     };
     msg::reply(rply, 0).expect("error in sending reply");
 }
@@ -127,7 +131,12 @@ fn reply(payload: impl Encode) -> GstdResult<MessageId> {
 fn common_state() -> IOOnchainQuant {
     let state = static_mut_state();
     let r_invest_ration = state.r_invest_ration;
-    IOOnchainQuant { r_invest_ration }
+    IOOnchainQuant {
+        r_invest_ration,
+        block_step: state.block_step,
+        block_next: state.block_next,
+        action_id: state.action_id,
+    }
 }
 
 fn static_mut_state() -> &'static mut OnchainQuant {

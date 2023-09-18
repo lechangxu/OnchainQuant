@@ -5,10 +5,13 @@ use gmeta::{In, InOut, Metadata};
 use gstd::prelude::*;
 use scale_info::TypeInfo;
 
-#[derive(Default, Encode, Decode, TypeInfo)]
+#[derive(Default, Debug, Encode, Decode, TypeInfo)]
 pub struct IOOnchainQuant {
     // Regular Investment Ratio
     pub r_invest_ration: u64,
+    pub block_step: u32,
+    pub block_next: u32,
+    pub action_id: u64,
 }
 
 #[derive(Encode, Decode, TypeInfo)]
@@ -20,11 +23,13 @@ pub enum OcqAction {
 }
 
 #[derive(Debug, PartialEq, Eq, Encode, Decode, TypeInfo)]
+#[codec(crate = gstd::codec)]
+#[scale_info(crate = gstd::scale_info)]
 pub enum OcqEvent {
     Start,
     Stop,
     Act,
-    GasReserve,
+    GasReserve { amount: u64, time: u32 },
 }
 
 #[derive(Debug, Decode, Encode, TypeInfo)]

@@ -8,6 +8,9 @@ edition = "2021"
 [dependencies]
 gstd.workspace = true
 onchainquant-io.workspace = true
+rand.workspace = true
+rand_xoshiro.workspace = true
+sp-core-hashing.workspace = true
 
 [build-dependencies]
 gear-wasm-builder.workspace = true

@@ -1,5 +1,5 @@
-use gstd::{Decode, Encode};
-use gtest::{Log, Program, System};
+use gstd::Encode;
+use gtest::{Program, System};
 use onchainquant_io::*;
 
 const USERS: &[u64] = &[3, 4, 5];

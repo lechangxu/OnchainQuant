@@ -24,5 +24,8 @@ gtest = { git = "https://github.com/gear-tech/gear.git", rev = "946ac47" }
 parity-scale-codec = { version = "3", default-features = false }
 scale-info = { version = "2", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread"] }
+rand = { version = "0.8", default-features = false }
+rand_xoshiro = "0.6"
+sp-core-hashing = { version = "11", default-features = false }
 
 onchainquant-io = { path = "contracts/onchainquant/io" }

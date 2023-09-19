@@ -4,6 +4,8 @@ use gstd::{
 
 use onchainquant_io::*;
 
+use crate::price;
+
 #[derive(Debug, Clone, Default)]
 pub struct OnchainQuant {
     // Regular Investment Ratio, in 0.000001
@@ -54,6 +56,9 @@ impl OnchainQuant {
             return;
         }
         debug!("run action {} in block {}", self.action_id, block);
+
+        let price = price::get_price("ocqBTC");
+        debug!("get price {price}");
         let reservation_id = self
             .reservation_ids
             .get(&self.owner)

@@ -57,7 +57,10 @@ impl OnchainQuant {
         }
         debug!("run action {} in block {}", self.action_id, block);
 
-        let price = price::get_price("ocqBTC");
+        let price = price::get_price("ocqBTC").unwrap_or_else(|e| {
+            debug!("fail to get price {:?}", e);
+            0
+        });
         debug!("get price {price}");
         let reservation_id = self
             .reservation_ids
@@ -121,6 +124,7 @@ extern "C" fn init() {
         owner: msg::source(),
     };
     unsafe { ONCHAIN_QUANT = Some(quant) };
+    price::init();
 }
 
 #[no_mangle]

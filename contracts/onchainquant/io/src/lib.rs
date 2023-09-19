@@ -20,6 +20,7 @@ pub enum OcqAction {
     Stop,
     Act,
     GasReserve,
+    Terminate,
 }
 
 #[derive(Debug, PartialEq, Eq, Encode, Decode, TypeInfo)]
@@ -30,6 +31,7 @@ pub enum OcqEvent {
     Stop,
     Act,
     GasReserve { amount: u64, time: u32 },
+    Terminate,
 }
 
 #[derive(Debug, Decode, Encode, TypeInfo)]

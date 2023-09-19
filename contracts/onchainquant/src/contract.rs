@@ -108,6 +108,9 @@ extern "C" fn handle() {
             OcqEvent::Act
         }
         OcqAction::GasReserve => quant.reserve(),
+        OcqAction::Terminate => {
+            exec::exit(quant.owner);
+        }
     };
     msg::reply(rply, 0).expect("error in sending reply");
 }

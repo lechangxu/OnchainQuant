@@ -27,7 +27,8 @@ pub struct OnchainQuant {
     pub r_invest_ration: u64,
     pub reservation_ids: HashMap<ActorId, ReservationId>,
     pub token_info: HashMap<String, TokenInfo>,
-    pub token_deposit: HashMap<String, TokenDeposit>,
+    // account => (Token => Deposit)
+    pub user_invest: HashMap<ActorId, HashMap<String, TokenDeposit>>,
     pub block_step: u32,
     pub block_next: u32,
     pub action_id: u64,
@@ -73,42 +74,46 @@ impl OnchainQuant {
     }
 
     fn quant(&mut self) {
-        let weight_sum: u32 = self
-            .token_deposit
-            .iter()
-            .filter(|(k, _v)| k.as_str() != USDT_NAME)
-            .map(|(_k, v)| v.weight)
-            .sum();
         let prices = price::get_price();
-        let usdt = self.token_deposit.entry_ref(USDT_NAME).or_default();
-        let budget = usdt.amount * self.r_invest_ration as u128 / RATION_MULTIPLES;
-        usdt.amount -= budget;
-
-        for (k, token) in self
-            .token_deposit
-            .iter_mut()
-            .filter(|(k, _v)| k.as_str() != USDT_NAME)
-        {
-            let price = prices.get(k).unwrap();
-            // budget * (weight / weight_sum) / price * btc_multiples
-            let budget = budget * token.weight as u128 / weight_sum as u128;
-            let info = self.token_info.get(k).unwrap();
-            let buy = budget * info.multiples as u128 / *price as u128;
-            token.amount += buy;
-            debug!("Spend {} USDT, buy {} {}", budget, buy, k);
-        }
-        let mut total_asset = 0u128;
-        for (k, token) in &self.token_deposit {
-            debug!("{} {}", k, token.amount);
-            if k == USDT_NAME {
-                total_asset += token.amount;
+        for (user, token_deposit) in self.user_invest.iter_mut() {
+            let who = if user == &exec::program_id() {
+                "********** contract ********* ".to_string()
             } else {
-                let info = self.token_info.get(k).unwrap();
+                hex::encode(user.as_ref())
+            };
+            let weight_sum: u32 = token_deposit
+                .iter()
+                .filter(|(k, _v)| k.as_str() != USDT_NAME)
+                .map(|(_k, v)| v.weight)
+                .sum();
+            let usdt = token_deposit.entry_ref(USDT_NAME).or_default();
+            let budget = usdt.amount * self.r_invest_ration as u128 / RATION_MULTIPLES;
+            usdt.amount -= budget;
+            for (k, token) in token_deposit
+                .iter_mut()
+                .filter(|(k, _v)| k.as_str() != USDT_NAME)
+            {
                 let price = prices.get(k).unwrap();
-                total_asset += *price as u128 * token.amount / info.multiples as u128;
+                // budget * (weight / weight_sum) / price * btc_multiples
+                let budget = budget * token.weight as u128 / weight_sum as u128;
+                let info = self.token_info.get(k).unwrap();
+                let buy = budget * info.multiples as u128 / *price as u128;
+                token.amount += buy;
+                debug!("{} Spend {} USDT, buy {} {}", who, budget, buy, k);
             }
+            let mut total_asset = 0u128;
+            for (k, token) in token_deposit {
+                debug!("{} {} {}", who, k, token.amount);
+                if k == USDT_NAME {
+                    total_asset += token.amount;
+                } else {
+                    let info = self.token_info.get(k).unwrap();
+                    let price = prices.get(k).unwrap();
+                    total_asset += *price as u128 * token.amount / info.multiples as u128;
+                }
+            }
+            debug!("{} total asset {}", who, total_asset);
         }
-        debug!("total asset {}", total_asset);
     }
 
     fn action(&mut self) {
@@ -220,6 +225,7 @@ extern "C" fn init() {
             amount: 100_000 * 1_000_000u128,
         },
     );
+    let user_invest = dummy_user_invest(&token_deposit);
     let quant = OnchainQuant {
         r_invest_ration: config.r_invest_ration,
         reservation_ids: HashMap::new(),
@@ -228,10 +234,40 @@ extern "C" fn init() {
         action_id: 0,
         owner: msg::source(),
         token_info,
-        token_deposit,
+        user_invest,
     };
     unsafe { ONCHAIN_QUANT = Some(quant) };
     price::init();
+}
+
+fn actor_id_from_str(other: &str) -> ActorId {
+    let id = other.strip_prefix("0x").unwrap_or(other);
+
+    let mut bytes = [0u8; 32];
+
+    if hex::decode_to_slice(id, &mut bytes).is_err() {
+        panic!("Invalid identifier: {:?}", other)
+    }
+
+    ActorId::from(bytes)
+}
+
+fn dummy_user_invest(
+    prototype: &HashMap<String, TokenDeposit>,
+) -> HashMap<ActorId, HashMap<String, TokenDeposit>> {
+    let actors = [
+        "0x54d13cda7abe4aab7adbe1b7d2da8662934f33c628d7737d2be33e95075fc77e",
+        "0x4ccf35ad0f22d5a83a6a0608bcbbce9992974293ac492858a2370a93af9ebd45",
+        "0x8472f7754a62850263727957b7acf7d077961a9e94816fce2780c72d5a2a5717",
+        "0x327caff531d22348427ca6d7a051cecc6d621a72c8d9db3be8dd544fa78a263c",
+    ];
+    let mut dest = HashMap::new();
+    for actor in actors {
+        let actor = actor_id_from_str(actor);
+        dest.insert(actor, prototype.clone());
+    }
+    dest.insert(exec::program_id(), prototype.clone());
+    dest
 }
 
 #[no_mangle]

@@ -7,24 +7,39 @@ use onchainquant_io::*;
 use crate::price;
 
 #[derive(Debug, Clone, Default)]
+pub struct TokenInfo {
+    pub name: String,
+    // generated from decimals, if token decimal is 6, the multiples is 1_000_000
+    pub multiples: u64,
+    // pub program_id: ActorId,
+
+    // weight for Asset Allocation ratio,
+    pub weight: u32,
+    pub amount: u128,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct OnchainQuant {
     // Regular Investment Ratio, in 0.000001
     pub r_invest_ration: u64,
     pub reservation_ids: HashMap<ActorId, ReservationId>,
-    pub token_amount: HashMap<String, u128>,
+    pub token_info: HashMap<String, TokenInfo>,
     pub block_step: u32,
     pub block_next: u32,
     pub action_id: u64,
     pub owner: ActorId,
 }
+const RATION_MULTIPLES: u128 = 1_000_000;
 static mut ONCHAIN_QUANT: Option<OnchainQuant> = None;
 
 static RESERVATION_AMOUNT: u64 = 50_000_000;
 // 30 days
 static RESERVATION_TIME: u32 = 30 * 24 * 60 * 60 / 2;
 
-const BTC_NAME: &str = "ocqBTC";
-const USDT_NAME: &str = "ocqUSDT";
+pub(crate) const BTC_NAME: &str = "ocqBTC";
+pub(crate) const DOT_NAME: &str = "ocqDOT";
+pub(crate) const USDT_NAME: &str = "ocqUSDT";
+
 impl OnchainQuant {
     fn start(&mut self) {
         let source = msg::source();
@@ -54,31 +69,39 @@ impl OnchainQuant {
     }
 
     fn quant(&mut self) {
-        let price = price::get_price(BTC_NAME).unwrap_or_else(|e| {
-            debug!("fail to get price {:?}", e);
-            0
-        });
-        debug!("get price {price}");
-        if price == 0 {
-            return;
-        }
-        let amount = self.token_amount.entry_ref(USDT_NAME).or_insert(0);
-        let budget = *amount * self.r_invest_ration as u128 / 1_000_000;
-        *amount -= budget;
+        let weight_sum: u32 = self
+            .token_info
+            .iter()
+            .filter(|(k, _v)| k.as_str() != USDT_NAME)
+            .map(|(_k, v)| v.weight)
+            .sum();
+        let prices = price::get_price();
+        let usdt = self.token_info.entry_ref(USDT_NAME).or_default();
+        let budget = usdt.amount * self.r_invest_ration as u128 / RATION_MULTIPLES;
+        usdt.amount -= budget;
         debug!(
             "get budget {budget} r_invest_ration {0}",
             self.r_invest_ration
         );
-        let btc = self.token_amount.entry_ref(BTC_NAME).or_insert(0);
-        *btc += budget * 1_0000_0000 / price as u128;
-
+        for (k, token) in self
+            .token_info
+            .iter_mut()
+            .filter(|(k, _v)| k.as_str() != USDT_NAME)
+        {
+            let price = prices.get(k).unwrap();
+            // budget * (weight / weight_sum) / price * btc_multiples
+            token.amount += budget * token.weight as u128 * token.multiples as u128
+                / weight_sum as u128
+                / *price as u128;
+        }
         let mut total_asset = 0u128;
-        for (k, v) in &self.token_amount {
-            debug!("{} {}", k, v);
-            if k == BTC_NAME {
-                total_asset += price as u128 * v / 1_0000_0000;
-            } else if k == USDT_NAME {
-                total_asset += v;
+        for (k, token) in &self.token_info {
+            debug!("{} {}", k, token.amount);
+            if k == USDT_NAME {
+                total_asset += token.amount;
+            } else {
+                let price = prices.get(k).unwrap();
+                total_asset += *price as u128 * token.amount / token.multiples as u128;
             }
         }
         debug!("total asset {}", total_asset);
@@ -97,7 +120,7 @@ impl OnchainQuant {
             .get(&self.owner)
             .expect("can't find reservation");
         let _msg_id = msg::send_delayed_from_reservation(
-            reservation_id.clone(),
+            *reservation_id,
             exec::program_id(),
             OcqAction::Act,
             0,
@@ -148,9 +171,35 @@ extern "C" fn handle() {
 #[no_mangle]
 extern "C" fn init() {
     let config: InitConfig = msg::load().expect("Unable to decode InitConfig");
-    let mut token_amount = HashMap::new();
-    token_amount.insert("ocqBTC".to_string(), 0u128);
-    token_amount.insert("ocqUSDT".to_string(), 10_0000_0000_0000u128);
+
+    let mut token_info = HashMap::new();
+    token_info.insert(
+        BTC_NAME.to_string(),
+        TokenInfo {
+            name: BTC_NAME.to_string(),
+            multiples: 1_0000_0000,
+            weight: 300,
+            amount: 0,
+        },
+    );
+    token_info.insert(
+        DOT_NAME.to_string(),
+        TokenInfo {
+            name: DOT_NAME.to_string(),
+            multiples: 10_000_000_000u64,
+            weight: 200,
+            amount: 0,
+        },
+    );
+    token_info.insert(
+        USDT_NAME.to_string(),
+        TokenInfo {
+            name: USDT_NAME.to_string(),
+            multiples: 1_000_000,
+            weight: 500,
+            amount: 100_000 * 1_000_000u128,
+        },
+    );
     let quant = OnchainQuant {
         r_invest_ration: config.r_invest_ration,
         reservation_ids: HashMap::new(),
@@ -158,7 +207,7 @@ extern "C" fn init() {
         block_next: 0,
         action_id: 0,
         owner: msg::source(),
-        token_amount,
+        token_info,
     };
     unsafe { ONCHAIN_QUANT = Some(quant) };
     price::init();

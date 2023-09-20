@@ -12,7 +12,10 @@ pub struct TokenInfo {
     // generated from decimals, if token decimal is 6, the multiples is 1_000_000
     pub multiples: u64,
     // pub program_id: ActorId,
+}
 
+#[derive(Debug, Clone, Default)]
+pub struct TokenDeposit {
     // weight for Asset Allocation ratio,
     pub weight: u32,
     pub amount: u128,
@@ -24,6 +27,7 @@ pub struct OnchainQuant {
     pub r_invest_ration: u64,
     pub reservation_ids: HashMap<ActorId, ReservationId>,
     pub token_info: HashMap<String, TokenInfo>,
+    pub token_deposit: HashMap<String, TokenDeposit>,
     pub block_step: u32,
     pub block_next: u32,
     pub action_id: u64,
@@ -70,36 +74,38 @@ impl OnchainQuant {
 
     fn quant(&mut self) {
         let weight_sum: u32 = self
-            .token_info
+            .token_deposit
             .iter()
             .filter(|(k, _v)| k.as_str() != USDT_NAME)
             .map(|(_k, v)| v.weight)
             .sum();
         let prices = price::get_price();
-        let usdt = self.token_info.entry_ref(USDT_NAME).or_default();
+        let usdt = self.token_deposit.entry_ref(USDT_NAME).or_default();
         let budget = usdt.amount * self.r_invest_ration as u128 / RATION_MULTIPLES;
         usdt.amount -= budget;
 
         for (k, token) in self
-            .token_info
+            .token_deposit
             .iter_mut()
             .filter(|(k, _v)| k.as_str() != USDT_NAME)
         {
             let price = prices.get(k).unwrap();
             // budget * (weight / weight_sum) / price * btc_multiples
             let budget = budget * token.weight as u128 / weight_sum as u128;
-            let buy = budget * token.multiples as u128 / *price as u128;
+            let info = self.token_info.get(k).unwrap();
+            let buy = budget * info.multiples as u128 / *price as u128;
             token.amount += buy;
             debug!("Spend {} USDT, buy {} {}", budget, buy, k);
         }
         let mut total_asset = 0u128;
-        for (k, token) in &self.token_info {
+        for (k, token) in &self.token_deposit {
             debug!("{} {}", k, token.amount);
             if k == USDT_NAME {
                 total_asset += token.amount;
             } else {
+                let info = self.token_info.get(k).unwrap();
                 let price = prices.get(k).unwrap();
-                total_asset += *price as u128 * token.amount / token.multiples as u128;
+                total_asset += *price as u128 * token.amount / info.multiples as u128;
             }
         }
         debug!("total asset {}", total_asset);
@@ -176,8 +182,6 @@ extern "C" fn init() {
         TokenInfo {
             name: BTC_NAME.to_string(),
             multiples: 1_0000_0000,
-            weight: 300,
-            amount: 0,
         },
     );
     token_info.insert(
@@ -185,8 +189,6 @@ extern "C" fn init() {
         TokenInfo {
             name: DOT_NAME.to_string(),
             multiples: 10_000_000_000u64,
-            weight: 200,
-            amount: 0,
         },
     );
     token_info.insert(
@@ -194,6 +196,26 @@ extern "C" fn init() {
         TokenInfo {
             name: USDT_NAME.to_string(),
             multiples: 1_000_000,
+        },
+    );
+    let mut token_deposit = HashMap::new();
+    token_deposit.insert(
+        BTC_NAME.to_string(),
+        TokenDeposit {
+            weight: 300,
+            amount: 0,
+        },
+    );
+    token_deposit.insert(
+        DOT_NAME.to_string(),
+        TokenDeposit {
+            weight: 200,
+            amount: 0,
+        },
+    );
+    token_deposit.insert(
+        USDT_NAME.to_string(),
+        TokenDeposit {
             weight: 500,
             amount: 100_000 * 1_000_000u128,
         },
@@ -206,6 +228,7 @@ extern "C" fn init() {
         action_id: 0,
         owner: msg::source(),
         token_info,
+        token_deposit,
     };
     unsafe { ONCHAIN_QUANT = Some(quant) };
     price::init();

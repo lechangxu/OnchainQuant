@@ -79,10 +79,7 @@ impl OnchainQuant {
         let usdt = self.token_info.entry_ref(USDT_NAME).or_default();
         let budget = usdt.amount * self.r_invest_ration as u128 / RATION_MULTIPLES;
         usdt.amount -= budget;
-        debug!(
-            "get budget {budget} r_invest_ration {0}",
-            self.r_invest_ration
-        );
+
         for (k, token) in self
             .token_info
             .iter_mut()
@@ -90,9 +87,10 @@ impl OnchainQuant {
         {
             let price = prices.get(k).unwrap();
             // budget * (weight / weight_sum) / price * btc_multiples
-            token.amount += budget * token.weight as u128 * token.multiples as u128
-                / weight_sum as u128
-                / *price as u128;
+            let budget = budget * token.weight as u128 / weight_sum as u128;
+            let buy = budget * token.multiples as u128 / *price as u128;
+            token.amount += buy;
+            debug!("Spend {} USDT, buy {} {}", budget, buy, k);
         }
         let mut total_asset = 0u128;
         for (k, token) in &self.token_info {

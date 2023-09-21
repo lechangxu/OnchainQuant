@@ -1,5 +1,5 @@
 use gstd::{
-    debug, errors::Result as GstdResult, exec, msg, prelude::*, ActorId, MessageId, ReservationId,
+    debug, errors::Result as GstdResult, exec, msg, prelude::*, ActorId, MessageId, Reservation,
 };
 
 use onchainquant_io::*;
@@ -25,7 +25,7 @@ pub struct TokenDeposit {
 pub struct OnchainQuant {
     // Regular Investment Ratio, in 0.000001
     pub r_invest_ration: u64,
-    pub reservation_ids: HashMap<ActorId, ReservationId>,
+    pub reservations: HashMap<ActorId, Reservation>,
     pub token_info: HashMap<String, TokenInfo>,
     // account => (Token => Deposit)
     pub user_invest: HashMap<ActorId, HashMap<String, TokenDeposit>>,
@@ -124,12 +124,12 @@ impl OnchainQuant {
         }
         debug!("run action {} in block {}", self.action_id, block);
         self.quant();
-        let reservation_id = self
-            .reservation_ids
+        let reservation = self
+            .reservations
             .get(&self.owner)
             .expect("can't find reservation");
         let _msg_id = msg::send_delayed_from_reservation(
-            *reservation_id,
+            reservation.id(),
             exec::program_id(),
             OcqAction::Act,
             0,
@@ -141,9 +141,13 @@ impl OnchainQuant {
     }
 
     fn reserve(&mut self) -> OcqEvent {
-        let reservation_id = ReservationId::reserve(RESERVATION_AMOUNT, RESERVATION_TIME)
+        let reservation = Reservation::reserve(RESERVATION_AMOUNT, RESERVATION_TIME)
             .expect("reservation across executions");
-        self.reservation_ids.insert(msg::source(), reservation_id);
+        if let Some(resv) = self.reservations.insert(msg::source(), reservation) {
+            if let Ok(gas) = resv.unreserve() {
+                debug!("release {gas} gas");
+            }
+        }
         debug!("reserve {RESERVATION_AMOUNT} gas for {RESERVATION_TIME} blocks");
         OcqEvent::GasReserve {
             amount: RESERVATION_AMOUNT,
@@ -228,7 +232,7 @@ extern "C" fn init() {
     let user_invest = dummy_user_invest(&token_deposit);
     let quant = OnchainQuant {
         r_invest_ration: config.r_invest_ration,
-        reservation_ids: HashMap::new(),
+        reservations: HashMap::new(),
         block_step: config.block_step,
         block_next: 0,
         action_id: 0,

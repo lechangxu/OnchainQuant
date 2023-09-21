@@ -91,3 +91,20 @@ fn stop() {
     assert_eq!(status3.block_next, 0);
     assert_eq!(status3.action_id, status2.action_id);
 }
+
+#[test]
+fn reserve_again() {
+    let sys = System::new();
+    init(&sys);
+    let quant = sys.get_program(1);
+    let res = quant.send(USERS[0], OcqAction::GasReserve);
+    let r = OcqEvent::GasReserve {
+        amount: 100_000,
+        time: 1296000,
+    }
+    .encode();
+    assert!(res.contains(&(USERS[0], r.clone())));
+    let res = quant.send(USERS[0], OcqAction::GasReserve);
+    let _ = sys.spend_blocks(10);
+    assert!(res.contains(&(USERS[0], r)));
+}

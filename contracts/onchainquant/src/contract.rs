@@ -229,13 +229,11 @@ impl OnchainQuant {
         }
     }
 
-    fn allocation_ration(&mut self, token: String, weight: u32) {
-        self.user_invest
-            .entry(msg::source())
-            .or_default()
-            .entry(token)
-            .or_default()
-            .weight = weight;
+    fn allocation_ration(&mut self, tokens: Vec<(String, u32)>) {
+        let user_tokens = self.user_invest.entry(msg::source()).or_default();
+        for (token, weight) in tokens {
+            user_tokens.entry(token).or_default().weight = weight;
+        }
     }
 
     fn invest(&mut self, token: String, amount: u128) {
@@ -270,8 +268,10 @@ extern "C" fn handle() {
         OcqAction::Terminate => {
             exec::exit(quant.owner);
         }
-        OcqAction::AssetAllocationRatio { token, weight } => {
-            quant.allocation_ration(token, weight);
+        OcqAction::AssetAllocationRatio(tokens) => {
+            if !tokens.is_empty() {
+                quant.allocation_ration(tokens);
+            }
             OcqEvent::Success
         }
         OcqAction::Invest { token, amount } => {

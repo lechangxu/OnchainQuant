@@ -38,7 +38,12 @@ pub fn get_price() -> HashMap<String, u64> {
     for (k, v) in base_price.iter() {
         let ratio: i32 = generator.gen_range(range.clone());
         let dest_price = v * (1000 + ratio) as u64 / 1000;
-        debug!("get {k} price ratio {ratio}, final price {dest_price}");
+        let n = ratio / 10;
+        let p = ratio.abs() % 10;
+        debug!(
+            "get {k} price ratio {0}.{1:0>1}%, final price {dest_price}",
+            n, p,
+        );
         dest.insert(k.to_string(), dest_price);
     }
     dest

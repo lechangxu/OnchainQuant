@@ -29,6 +29,15 @@ pub enum OcqAction {
 }
 
 #[derive(Default, Debug, Encode, Decode, TypeInfo)]
+pub struct TradeMsg {
+    pub time: u64,
+    pub from_token: String,
+    pub from_amount: u128,
+    pub to_token: String,
+    pub to_amount: u128,
+}
+
+#[derive(Default, Debug, Encode, Decode, TypeInfo)]
 pub struct GasAlertMsg {
     pub remain_gas: u64,
     pub remain_block: u32,

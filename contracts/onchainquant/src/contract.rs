@@ -104,6 +104,18 @@ impl OnchainQuant {
                 let buy = budget * info.multiples as u128 / *price as u128;
                 token.amount += buy;
                 debug!("{} Spend {} USDT, buy {} {}", who, budget, buy, k);
+                let _ = msg::send(
+                    *user,
+                    TradeMsg {
+                        time: exec::block_timestamp(),
+                        from_token: USDT_NAME.to_string(),
+                        from_amount: budget,
+                        to_token: k.to_string(),
+                        to_amount: buy,
+                    }
+                    .encode(),
+                    0,
+                );
             }
             let mut total_asset = 0u128;
             for (k, token) in token_deposit {

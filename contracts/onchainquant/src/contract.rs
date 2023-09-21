@@ -85,7 +85,9 @@ impl OnchainQuant {
             };
             let weight_sum: u32 = token_deposit
                 .iter()
-                .filter(|(k, _v)| k.as_str() != USDT_NAME)
+                .filter(|(k, _v)| {
+                    k.as_str() != USDT_NAME && (k.as_str() == BTC_NAME || k.as_str() == DOT_NAME)
+                })
                 .map(|(_k, v)| v.weight)
                 .sum();
             let usdt = token_deposit.entry_ref(USDT_NAME).or_default();
@@ -214,6 +216,24 @@ impl OnchainQuant {
             time: blocks,
         }
     }
+
+    fn allocation_ration(&mut self, token: String, weight: u32) {
+        self.user_invest
+            .entry(msg::source())
+            .or_default()
+            .entry(token)
+            .or_default()
+            .weight = weight;
+    }
+
+    fn invest(&mut self, token: String, amount: u128) {
+        self.user_invest
+            .entry(msg::source())
+            .or_default()
+            .entry(token)
+            .or_default()
+            .amount += amount;
+    }
 }
 
 #[no_mangle]
@@ -238,6 +258,19 @@ extern "C" fn handle() {
         OcqAction::Terminate => {
             exec::exit(quant.owner);
         }
+        OcqAction::AssetAllocationRatio { token, weight } => {
+            quant.allocation_ration(token, weight);
+            OcqEvent::Success
+        }
+        OcqAction::Invest { token, amount } => {
+            // should query ft contract for the amount of tokens
+            quant.invest(token, amount);
+            OcqEvent::Success
+        }
+        OcqAction::WithDraw {
+            token: _,
+            amount: _,
+        } => todo!(),
     };
     msg::reply(rply, 0).expect("error in sending reply");
 }

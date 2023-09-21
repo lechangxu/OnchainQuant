@@ -21,6 +21,10 @@ pub enum OcqAction {
     Act,
     GasReserve { amount: u64, blocks: u32 },
     GasReserveDefault,
+    // change AssetAllocationRatio, token => weight
+    AssetAllocationRatio { token: String, weight: u32 },
+    Invest { token: String, amount: u128 },
+    WithDraw { token: String, amount: u128 },
     Terminate,
 }
 

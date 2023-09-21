@@ -244,6 +244,13 @@ impl OnchainQuant {
             .or_default()
             .amount += amount;
     }
+
+    fn asset_of(&self) -> Vec<(String, u128)> {
+        self.user_invest
+            .get(&msg::source())
+            .map(|m| m.iter().map(|(k, v)| (k.to_string(), v.amount)).collect())
+            .unwrap_or_default()
+    }
 }
 
 #[no_mangle]
@@ -283,6 +290,7 @@ extern "C" fn handle() {
             token: _,
             amount: _,
         } => todo!(),
+        OcqAction::Asset => OcqEvent::Asset(quant.asset_of()),
     };
     msg::reply(rply, 0).expect("error in sending reply");
 }

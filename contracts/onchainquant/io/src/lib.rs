@@ -25,6 +25,7 @@ pub enum OcqAction {
     AssetAllocationRatio(Vec<(String, u32)>),
     Invest { token: String, amount: u128 },
     WithDraw { token: String, amount: u128 },
+    Asset,
     Terminate,
 }
 
@@ -49,6 +50,8 @@ pub struct GasAlertMsg {
 #[scale_info(crate = gstd::scale_info)]
 pub enum OcqEvent {
     GasReserve { amount: u64, time: u32 },
+    // vector of (token name, amount)
+    Asset(Vec<(String, u128)>),
     Success,
 }
 

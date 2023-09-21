@@ -40,6 +40,8 @@ static mut ONCHAIN_QUANT: Option<OnchainQuant> = None;
 static RESERVATION_AMOUNT: u64 = 50_000_000;
 // 30 days
 static RESERVATION_TIME: u32 = 30 * 24 * 60 * 60 / 2;
+static ALERT_REMAIN_GAS: u64 = 5_000;
+static ALERT_REMAIN_BLOCKS: u32 = 2 * 24 * 60 * 60 / 2;
 
 pub(crate) const BTC_NAME: &str = "ocqBTC";
 pub(crate) const DOT_NAME: &str = "ocqDOT";
@@ -116,6 +118,57 @@ impl OnchainQuant {
         }
     }
 
+    fn check_reserve(&self, user: &ActorId) {
+        if let Some(res) = self.reservations.get(user) {
+            let amount = res.amount();
+            let block_height = exec::block_height();
+            let valid_until = res.valid_until();
+
+            debug!("amount {amount}, block_height {block_height} valid_until {valid_until}");
+
+            if amount <= ALERT_REMAIN_GAS
+                || block_height >= valid_until
+                || (valid_until - block_height) <= ALERT_REMAIN_BLOCKS
+            {
+                let remain_block = if block_height < valid_until {
+                    valid_until - block_height
+                } else {
+                    0
+                };
+                let mail = format!(
+                    "reamin {amount} gas, remain {0} blocks, please update gas reservation",
+                    remain_block
+                );
+
+                debug!("send to mailbox:{}", mail);
+                match msg::send(
+                    *user,
+                    GasAlertMsg {
+                        remain_gas: amount,
+                        remain_block,
+                        msg: mail,
+                    }
+                    .encode(),
+                    0,
+                ) {
+                    Ok(_) => debug!("success send to mailbox"),
+                    Err(e) => debug!("send to mailbox failed {e}"),
+                }
+            }
+        } else {
+            let _ = msg::send(
+                *user,
+                GasAlertMsg {
+                    msg: "no gas reservation".to_string(),
+                    remain_gas: 0,
+                    remain_block: 0,
+                }
+                .encode(),
+                0,
+            );
+        }
+    }
+
     fn action(&mut self) {
         let block = exec::block_height();
         if self.block_next != block {
@@ -124,6 +177,7 @@ impl OnchainQuant {
         }
         debug!("run action {} in block {}", self.action_id, block);
         self.quant();
+        self.check_reserve(&self.owner);
         let reservation = self
             .reservations
             .get(&self.owner)
@@ -140,18 +194,24 @@ impl OnchainQuant {
         self.block_next = block + self.block_step;
     }
 
-    fn reserve(&mut self) -> OcqEvent {
-        let reservation = Reservation::reserve(RESERVATION_AMOUNT, RESERVATION_TIME)
-            .expect("reservation across executions");
+    fn reserve(&mut self, amount: u64, blocks: u32) -> OcqEvent {
+        let reservation = match Reservation::reserve(amount, blocks) {
+            Ok(res) => res,
+            Err(e) => {
+                debug!("reservation failed: {e}");
+                return OcqEvent::GasReserve { amount: 0, time: 0 };
+            }
+        };
+
         if let Some(resv) = self.reservations.insert(msg::source(), reservation) {
             if let Ok(gas) = resv.unreserve() {
                 debug!("release {gas} gas");
             }
         }
-        debug!("reserve {RESERVATION_AMOUNT} gas for {RESERVATION_TIME} blocks");
+        debug!("reserve {amount} gas for {blocks} blocks");
         OcqEvent::GasReserve {
-            amount: RESERVATION_AMOUNT,
-            time: RESERVATION_TIME,
+            amount,
+            time: blocks,
         }
     }
 }
@@ -163,17 +223,18 @@ extern "C" fn handle() {
     let rply = match action {
         OcqAction::Start => {
             quant.start();
-            OcqEvent::Start
+            OcqEvent::Success
         }
         OcqAction::Stop => {
             quant.stop();
-            OcqEvent::Stop
+            OcqEvent::Success
         }
         OcqAction::Act => {
             quant.action();
-            OcqEvent::Act
+            OcqEvent::Success
         }
-        OcqAction::GasReserve => quant.reserve(),
+        OcqAction::GasReserve { amount, blocks } => quant.reserve(amount, blocks),
+        OcqAction::GasReserveDefault => quant.reserve(RESERVATION_AMOUNT, RESERVATION_TIME),
         OcqAction::Terminate => {
             exec::exit(quant.owner);
         }

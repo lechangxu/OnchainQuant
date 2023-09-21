@@ -19,19 +19,24 @@ pub enum OcqAction {
     Start,
     Stop,
     Act,
-    GasReserve,
+    GasReserve { amount: u64, blocks: u32 },
+    GasReserveDefault,
     Terminate,
+}
+
+#[derive(Default, Debug, Encode, Decode, TypeInfo)]
+pub struct GasAlertMsg {
+    pub remain_gas: u64,
+    pub remain_block: u32,
+    pub msg: String,
 }
 
 #[derive(Debug, PartialEq, Eq, Encode, Decode, TypeInfo)]
 #[codec(crate = gstd::codec)]
 #[scale_info(crate = gstd::scale_info)]
 pub enum OcqEvent {
-    Start,
-    Stop,
-    Act,
     GasReserve { amount: u64, time: u32 },
-    Terminate,
+    Success,
 }
 
 #[derive(Debug, Decode, Encode, TypeInfo)]

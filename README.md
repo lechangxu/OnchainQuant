@@ -1,1 +1,2 @@
 # OnchainQuant
+OnchainQuant is an innovative blockchain-based quantitative investment project that provides users with a scientific and stable approach to on-chain investment strategies, including the powerful concepts of dollar-cost averaging and asset allocation. It aims to offer unstoppable long-term sustainable and reasonable returns for non-professional traders and cryptocurrency holders seeking passive income.
